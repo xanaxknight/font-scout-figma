@@ -1,29 +1,40 @@
-// Font Scout for Figma, three things in one window (ui.html):
+// Font Scout for Figma, in one window (ui.html):
 // - Glyphs: every character in the font where the text cursor is, to put in with a click.
 // - Fonts: the fonts missing on this computer, each with a replacement among the ones that are here (the same font
 //   under another name, else a similar one), all swapped in with one click. Shown as soon as the plugin opens.
+// CLAUDE {
 // - Claude: does what Claude asks, here in this file, in Figma on this computer, where every font installed on it
 //   loads. Claude's own Figma tools run on Figma's servers, which only have Google's fonts and the ones an
 //   organisation shares. The window talks to Font Scout's bridge on this computer and hands the commands over;
 //   this side runs them and hands back what came of them.
+// Everything between "CLAUDE {" and "} CLAUDE" is for Claude only: the Figma Community version is built without it
+// (scripts/build-community.mjs).
+// } CLAUDE
 figma.showUI(__html__, { width: 340, height: 500, themeColors: true });
 
+// CLAUDE {
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const CHANGES = ["setText", "setFont", "run"];
+// } CLAUDE
 
 figma.ui.onmessage = async (message) => {
   if (!message) return;
-  // The window has loaded: which file this is, the key it's paired with, and whether scripts may run
+  // The window has loaded: the page's missing fonts
   if (message.type === "ready") {
+    // CLAUDE {
+    // and for Claude which file this is, the key it's paired with, and whether scripts may run
     figma.ui.postMessage({
       type: "hello", file: figma.root.name, editor: figma.editorType,
       key: await figma.clientStorage.getAsync("pairingKey"),
       allowScripts: (await figma.clientStorage.getAsync("allowScripts")) !== false,
     });
+    // } CLAUDE
     figma.ui.postMessage({ type: "missing", ...(await missingFonts("page")) });
   }
+  // CLAUDE {
   if (message.type === "saveKey") await figma.clientStorage.setAsync("pairingKey", message.key);
   if (message.type === "allowScripts") await figma.clientStorage.setAsync("allowScripts", message.value);
+  // } CLAUDE
   if (message.type === "insert") figma.ui.postMessage({ type: "inserted", glyph: message.glyph, ...(await insertGlyph(message.glyph)) });
   if (message.type === "scanMissing") figma.ui.postMessage({ type: "missing", ...(await missingFonts(message.scope)) });
   // One font, or all of them: either way one step for ⌘Z
@@ -34,6 +45,7 @@ figma.ui.onmessage = async (message) => {
     figma.ui.postMessage({ type: "replaced", fonts: message.swaps.length, changed });
   }
   if (message.type === "select") await selectLayers(message.nodeIds);
+  // CLAUDE {
   if (message.type !== "command") return;
   let reply;
   try {
@@ -44,8 +56,15 @@ figma.ui.onmessage = async (message) => {
   // Each change Claude makes is one step for ⌘Z
   if (CHANGES.includes(message.op)) figma.commitUndo();
   figma.ui.postMessage(reply);
+  // } CLAUDE
 };
 
+function fontsOf(node) {
+  if (!node.characters.length) return node.fontName === figma.mixed ? [] : [node.fontName];
+  return node.getRangeAllFontNames(0, node.characters.length);
+}
+
+// CLAUDE {
 async function run(op, args) {
   switch (op) {
     case "status": return status();
@@ -105,11 +124,6 @@ async function nodeById(id) {
   while (page && page.type !== "PAGE") page = page.parent;
   if (page && page !== figma.currentPage) await page.loadAsync();
   return node;
-}
-
-function fontsOf(node) {
-  if (!node.characters.length) return node.fontName === figma.mixed ? [] : [node.fontName];
-  return node.getRangeAllFontNames(0, node.characters.length);
 }
 
 // Text layers under a layer, or the selection, or the current page
@@ -172,6 +186,7 @@ async function screenshot(nodeId, scale) {
   const bytes = await node.exportAsync({ format: "PNG", constraint: { type: "SCALE", value } });
   return { image: figma.base64Encode(bytes), mimeType: "image/png", name: node.name };
 }
+// } CLAUDE
 
 // MARK: Glyphs
 

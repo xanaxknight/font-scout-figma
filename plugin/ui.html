@@ -1,14 +1,18 @@
-<!-- The plugin's window, in three tabs:
+<!-- The plugin's window, in tabs:
      - Glyphs: the characters of the font where the text cursor is. Figma doesn't say which a font has, so they're
        found by measuring, with a blank font behind it (make_blank_font.py) that takes every character it lacks
        and draws it zero wide. Local fonts by their names; a font only Figma has (most Google fonts) comes from
        Google Fonts.
      - Fonts: the fonts missing on this computer, each with a replacement among those that are here: the same font
        under another name, else a similar one. A bar under the tabs offers them all at once, as soon as it opens.
-       Where the Font Scout app has a missing family in its library, it can install it instead (after a yes there).
-     - Claude: asks Font Scout's bridge on this computer for what Claude wants done in this file, hands it to
+       Where the Font Scout app has a missing family in its library, it can install it instead (after a yes there). -->
+<!-- CLAUDE { -->
+<!-- - Claude: asks Font Scout's bridge on this computer for what Claude wants done in this file, hands it to
        code.js and sends back what came of it. Until the bridge knows this window, it shows a code for the user
-       to give Claude (figma_pair); the key it pairs with stays in Figma. -->
+       to give Claude (figma_pair); the key it pairs with stays in Figma.
+     Everything between "CLAUDE {" and "} CLAUDE" is for Claude only: the Figma Community version is built without it
+     (scripts/build-community.mjs). -->
+<!-- } CLAUDE -->
 <style>
   :root { color-scheme: light dark; --gap: 12px; }
   * { box-sizing: border-box; }
@@ -52,6 +56,7 @@
   .missing { padding: 10px 0; border-bottom: 1px solid var(--figma-color-border, #e6e6e6); }
   .missing .pick { display: grid; grid-template-columns: 1fr 108px auto; gap: 6px; margin-top: 8px; }
   .link { border: 0; background: none; padding: 0; font: inherit; color: var(--figma-color-text-brand, #0d99ff); cursor: pointer; }
+  /* CLAUDE { */
   /* Claude */
   .code { margin: 12px 0 4px; font: 600 28px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; }
   .history { list-style: none; margin: 0; padding: 0; }
@@ -61,13 +66,16 @@
   .history .failed span { color: var(--figma-color-text-danger, #d33); }
   .block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--figma-color-border, #e6e6e6); }
   label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  /* } CLAUDE */
 </style>
 
 <nav>
   <img alt="" src="data:image/png;base64,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">
   <button data-tab="glyphs" class="active">Glyphs</button>
   <button data-tab="fonts">Fonts</button>
+  <!-- CLAUDE { -->
   <button data-tab="claude"><span class="dot wait" id="claude-dot"></span>Claude</button>
+  <!-- } CLAUDE -->
 </nav>
 
 <div class="banner" id="banner" hidden>
@@ -104,6 +112,7 @@
     <datalist id="families"></datalist>
   </section>
 
+  <!-- CLAUDE { -->
   <section id="claude" hidden>
     <div class="title" id="claude-title">Looking for Claude…</div>
     <div class="muted" id="claude-note">Start Claude with Font Scout's tools (font-scout-mcp). It connects by itself.</div>
@@ -113,6 +122,7 @@
       <div class="block"><label><input type="checkbox" id="scripts"> Let Claude run scripts in this file</label></div>
     </div>
   </section>
+  <!-- } CLAUDE -->
 </main>
 
 <footer class="muted" id="footer"></footer>
@@ -425,6 +435,7 @@
   $("banner-all").addEventListener("click", replaceAll);
   $("banner-review").addEventListener("click", () => show("fonts"));
 
+  // CLAUDE {
   // MARK: Claude
 
   const base = "http://localhost:51843";
@@ -494,6 +505,7 @@
   }
 
   $("scripts").addEventListener("change", () => post({ type: "allowScripts", value: $("scripts").checked }));
+  // } CLAUDE
 
   // MARK: Messages from code.js
 
@@ -501,6 +513,7 @@
     const message = event.data.pluginMessage;
     if (!message) return;
     switch (message.type) {
+      // CLAUDE {
       case "hello":
         file = message.file; editor = message.editor;
         $("scripts").checked = message.allowScripts;
@@ -508,6 +521,7 @@
         if (!message.key) post({ type: "saveKey", key });
         if (!started) { started = true; poll(); }
         break;
+      // } CLAUDE
       case "font":
         current = message.font; editing = message.editing;
         showGlyphs();
@@ -522,9 +536,11 @@
         say(`Replaced ${message.fonts} ${message.fonts === 1 ? "font" : "fonts"} in ${message.changed} ${message.changed === 1 ? "place" : "places"}. ⌘Z undoes it.`);
         scan();
         break;
+      // CLAUDE {
       case "result":
         answer(message);
         break;
+      // } CLAUDE
     }
   };
   post({ type: "ready" });

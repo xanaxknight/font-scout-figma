@@ -12,9 +12,16 @@ Claude's own Figma tools run on Figma's servers, which only have Google Fonts an
 - **Fonts.** The fonts a page uses that aren't on your computer, each with a replacement: the same font under another name where you have it ("Osé" for "Ose"), else a similar one of the same kind. A bar offers them all at once when the plugin opens; **Replace All** is one step for ⌘Z. With the [Font Scout app](https://xanaxknight.github.io/font-scout/) running, fonts that are in your Font Scout library can be installed instead, after a yes in the app.
 - **Claude.** While the plugin is open in a file, Claude can read and change its text with the fonts on your computer, through the bridge below. Each change is one step for ⌘Z, the window lists what Claude did, and you can turn scripts off.
 
-## Install
+## Two versions
 
-1. **The plugin.** From Figma Community (link coming). From this repository: in the Figma desktop app, *Plugins → Development → Import plugin from manifest…* and choose `plugin/manifest.json`.
+- **Font Scout** in Figma Community (link coming): Glyphs and Fonts. Figma Community doesn't take plugins that overlap with Figma's own MCP server, so this one has no Claude tab.
+- **Font Scout + Claude**, from this repository: everything above, and the Claude tab. In the Figma desktop app, *Plugins → Development → Import plugin from manifest…* and choose `plugin/manifest.json`.
+
+The Community version is built from the same code without the Claude parts: `node scripts/build-community.mjs` writes it to `dist/community-plugin/`.
+
+## Install Font Scout + Claude
+
+1. **The plugin**: import `plugin/manifest.json` as above.
 2. **The bridge, for Claude** (needs [Node.js](https://nodejs.org) 18 or later):
    - Claude Code:
      ```bash
