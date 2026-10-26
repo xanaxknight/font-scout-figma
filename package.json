@@ -1,0 +1,30 @@
+{
+  "name": "font-scout-mcp",
+  "version": "0.1.0",
+  "description": "Lets Claude change text in Figma with the fonts on your computer, through the Font Scout plugin.",
+  "type": "module",
+  "bin": {
+    "font-scout-mcp": "bin/font-scout-mcp.js"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "author": "Kir (xanaxknight)",
+  "homepage": "https://github.com/xanaxknight/font-scout-figma",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xanaxknight/font-scout-figma.git"
+  },
+  "keywords": [
+    "figma",
+    "fonts",
+    "mcp",
+    "claude",
+    "glyphs"
+  ]
+}

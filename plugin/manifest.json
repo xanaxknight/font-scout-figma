@@ -1,0 +1,21 @@
+{
+  "name": "Font Scout",
+  "id": "1438290457731905629",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma",
+    "slides"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "http://localhost:51843",
+      "http://localhost:51842",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ],
+    "reasoning": "Talks to Font Scout's bridge on this computer (font-scout-mcp), which passes on what Claude asks for in this file, and to the Font Scout app, which installs missing fonts from the user's library when they say so. Loads Google Fonts to show the characters of fonts that aren't installed on the computer."
+  }
+}

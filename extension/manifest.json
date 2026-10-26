@@ -1,0 +1,80 @@
+{
+  "manifest_version": "0.3",
+  "name": "font-scout",
+  "display_name": "Font Scout for Figma",
+  "version": "0.1.0",
+  "description": "Change text in Figma with the fonts on your computer, through the Font Scout plugin.",
+  "long_description": "Claude's own Figma tools run on Figma's servers, which only have Google Fonts and the fonts an organization shares, so text in any other font can't be changed there. With the Font Scout plugin open in a Figma file, these tools do the work in Figma on your computer, where every font installed on it is available.",
+  "author": {
+    "name": "Kir (xanaxknight)",
+    "url": "https://github.com/xanaxknight"
+  },
+  "homepage": "https://github.com/xanaxknight/font-scout-figma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xanaxknight/font-scout-figma.git"
+  },
+  "support": "https://github.com/xanaxknight/font-scout-figma/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": [
+    "figma",
+    "fonts",
+    "glyphs"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "bin/font-scout-mcp.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/bin/font-scout-mcp.js"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "figma_status",
+      "description": "The Figma files the Font Scout plugin is open in, and windows waiting to be paired"
+    },
+    {
+      "name": "figma_pair",
+      "description": "Pairs a plugin window with the 6-digit code it shows"
+    },
+    {
+      "name": "figma_find_fonts",
+      "description": "Font families Figma can use on this computer, with their exact style names"
+    },
+    {
+      "name": "figma_get_texts",
+      "description": "Text layers with their text, fonts and missing fonts"
+    },
+    {
+      "name": "figma_set_text",
+      "description": "Replaces a text layer's text, keeping its styling"
+    },
+    {
+      "name": "figma_set_font",
+      "description": "Sets the font of text layers, or of some of their characters"
+    },
+    {
+      "name": "figma_run",
+      "description": "Runs Figma Plugin API JavaScript in the open file"
+    },
+    {
+      "name": "figma_screenshot",
+      "description": "A picture of a layer, drawn with its real fonts"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

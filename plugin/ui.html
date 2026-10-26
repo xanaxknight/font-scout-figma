@@ -1,0 +1,531 @@
+<!-- The plugin's window, in three tabs:
+     - Glyphs: the characters of the font where the text cursor is. Figma doesn't say which a font has, so they're
+       found by measuring, with a blank font behind it (make_blank_font.py) that takes every character it lacks
+       and draws it zero wide. Local fonts by their names; a font only Figma has (most Google fonts) comes from
+       Google Fonts.
+     - Fonts: the fonts missing on this computer, each with a replacement among those that are here: the same font
+       under another name, else a similar one. A bar under the tabs offers them all at once, as soon as it opens.
+       Where the Font Scout app has a missing family in its library, it can install it instead (after a yes there).
+     - Claude: asks Font Scout's bridge on this computer for what Claude wants done in this file, hands it to
+       code.js and sends back what came of it. Until the bridge knows this window, it shows a code for the user
+       to give Claude (figma_pair); the key it pairs with stays in Figma. -->
+<style>
+  :root { color-scheme: light dark; --gap: 12px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+         background: var(--figma-color-bg, #fff); color: var(--figma-color-text, #1d1b18); }
+  .muted { color: var(--figma-color-text-secondary, #6e6a65); }
+  .faint { color: var(--figma-color-text-tertiary, #a8a39c); }
+  nav { display: flex; align-items: center; gap: 2px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--figma-color-border, #e6e6e6); flex: none; }
+  nav button { border: 0; background: none; color: var(--figma-color-text-secondary, #6e6a65); font: inherit; font-weight: 600; padding: 5px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  nav button.active { background: var(--figma-color-bg-secondary, #f0f0f0); color: var(--figma-color-text, #1d1b18); }
+  nav img { width: 20px; height: 20px; border-radius: 5px; margin-right: 6px; flex: none; }
+  .banner { padding: 10px 14px; background: var(--figma-color-bg-warning-tertiary, #fff4e5);
+            border-bottom: 1px solid var(--figma-color-border, #e6e6e6); flex: none; }
+  .banner .actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .banner .actions .link { margin-right: auto; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 6px;
+         background: var(--figma-color-bg-secondary, #f0f0f0); color: var(--figma-color-text-secondary, #6e6a65); vertical-align: 1px; }
+  .tag.library { background: var(--figma-color-bg-brand-tertiary, #e5f4ff); color: var(--figma-color-text-brand, #0d99ff); }
+  .tag.same { background: var(--figma-color-bg-success-tertiary, #e5f6ea); color: var(--figma-color-text-success, #198039); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--figma-color-icon-tertiary, #b3b3b3); flex: none; }
+  .dot.on { background: #3fb950; }
+  .dot.wait { background: #d29a5a; }
+  main { flex: 1; overflow: auto; padding: var(--gap) 14px; }
+  section[hidden], [hidden] { display: none !important; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .title { font-weight: 600; font-size: 13px; }
+  .spread { justify-content: space-between; }
+  input[type=search], input[list], select { font: inherit; color: inherit; background: var(--figma-color-bg-secondary, #f5f5f5); border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; min-width: 0; }
+  input:focus, select:focus { outline: none; border-color: var(--figma-color-border-selected, #0d99ff); }
+  .button { font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; background: var(--figma-color-bg-secondary, #f0f0f0); color: inherit; white-space: nowrap; }
+  .button.primary { background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+  .button:disabled { opacity: .45; cursor: default; }
+  /* Glyphs */
+  .font-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .group { margin: 14px 0 6px; font-size: 11px; font-weight: 600; color: var(--figma-color-text-secondary, #6e6a65); display: flex; justify-content: space-between; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; }
+  .grid button { aspect-ratio: 1; border: 0; border-radius: 6px; background: var(--figma-color-bg-secondary, #f5f5f5); color: inherit; font-size: 20px; line-height: 1; cursor: pointer; padding: 0; overflow: hidden; }
+  .grid button:hover { background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+  footer { flex: none; padding: 7px 14px; border-top: 1px solid var(--figma-color-border, #e6e6e6); min-height: 31px; }
+  /* Fonts */
+  .missing { padding: 10px 0; border-bottom: 1px solid var(--figma-color-border, #e6e6e6); }
+  .missing .pick { display: grid; grid-template-columns: 1fr 108px auto; gap: 6px; margin-top: 8px; }
+  .link { border: 0; background: none; padding: 0; font: inherit; color: var(--figma-color-text-brand, #0d99ff); cursor: pointer; }
+  /* Claude */
+  .code { margin: 12px 0 4px; font: 600 28px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; }
+  .history { list-style: none; margin: 0; padding: 0; }
+  .history li { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; padding: 2px 0; }
+  .history time { color: var(--figma-color-text-tertiary, #a8a39c); font-variant-numeric: tabular-nums; flex: none; }
+  .history span { overflow: hidden; text-overflow: ellipsis; color: var(--figma-color-text-secondary, #6e6a65); }
+  .history .failed span { color: var(--figma-color-text-danger, #d33); }
+  .block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--figma-color-border, #e6e6e6); }
+  label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+</style>
+
+<nav>
+  <img alt="" src="data:image/png;base64,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">
+  <button data-tab="glyphs" class="active">Glyphs</button>
+  <button data-tab="fonts">Fonts</button>
+  <button data-tab="claude"><span class="dot wait" id="claude-dot"></span>Claude</button>
+</nav>
+
+<div class="banner" id="banner" hidden>
+  <div class="title" id="banner-title"></div>
+  <div class="muted" id="banner-note"></div>
+  <div class="actions">
+    <button class="link" id="banner-review">Review</button>
+    <button class="button primary" id="banner-install" hidden></button>
+    <button class="button primary" id="banner-all">Replace All</button>
+  </div>
+</div>
+
+<main>
+  <section id="glyphs">
+    <div class="row spread">
+      <div class="font-name" id="glyph-font">No text selected</div>
+      <input type="search" id="glyph-search" placeholder="Find: é or 00E9" style="width: 120px">
+    </div>
+    <div class="muted" id="glyph-note">Click into a text, or select a text layer, to see its font's characters.</div>
+    <div id="glyph-groups"></div>
+  </section>
+
+  <section id="fonts" hidden>
+    <div class="row spread">
+      <div class="title" id="fonts-title">Missing fonts</div>
+      <div class="row">
+        <select id="fonts-scope"><option value="page">This page</option><option value="selection">Selection</option></select>
+        <button class="button" id="fonts-scan">Check</button>
+      </div>
+    </div>
+    <div class="muted" id="fonts-note">Fonts used here that this computer doesn't have, each with a replacement that it does.</div>
+    <div id="fonts-list"></div>
+    <div class="row" style="margin-top: 12px" id="fonts-all-row" hidden><button class="button primary" id="fonts-all">Replace All With Matches</button></div>
+    <datalist id="families"></datalist>
+  </section>
+
+  <section id="claude" hidden>
+    <div class="title" id="claude-title">Looking for Claude…</div>
+    <div class="muted" id="claude-note">Start Claude with Font Scout's tools (font-scout-mcp). It connects by itself.</div>
+    <div class="code" id="claude-code" hidden></div>
+    <div class="block" id="claude-connected" hidden>
+      <ul class="history" id="history"><li><span>Claude's changes show up here, each one a step for ⌘Z.</span></li></ul>
+      <div class="block"><label><input type="checkbox" id="scripts"> Let Claude run scripts in this file</label></div>
+    </div>
+  </section>
+</main>
+
+<footer class="muted" id="footer"></footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const post = (message) => parent.postMessage({ pluginMessage: message }, "*");
+  function make(tag, props = {}, children = []) { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; }
+  let flash = 0;
+  function say(text) { $("footer").textContent = text; const mine = ++flash; setTimeout(() => { if (flash === mine) $("footer").textContent = ""; }, 4000); }
+
+  // MARK: Tabs
+
+  let tab = "glyphs";
+  function show(name) {
+    tab = name;
+    for (const button of document.querySelectorAll("nav button")) button.classList.toggle("active", button.dataset.tab === name);
+    for (const section of document.querySelectorAll("main section")) section.hidden = section.id !== name;
+    showBanner();
+    if (name === "fonts" && !scanned) scan();
+  }
+  for (const button of document.querySelectorAll("nav button")) button.addEventListener("click", () => show(button.dataset.tab));
+
+  // MARK: Glyphs
+
+  const GROUPS = [
+    ["Basic Latin", [[0x21, 0x7e]]], ["Latin-1", [[0xa1, 0xff]]], ["Latin Extended", [[0x100, 0x24f], [0x1e00, 0x1eff]]],
+    ["Greek", [[0x370, 0x3ff]]], ["Cyrillic", [[0x400, 0x52f]]], ["Punctuation", [[0x2010, 0x205e]]],
+    ["Superscripts and Subscripts", [[0x2070, 0x209f]]], ["Currency", [[0x20a0, 0x20cf]]], ["Letterlike and Numbers", [[0x2100, 0x218f], [0x2460, 0x24ff]]],
+    ["Arrows", [[0x2190, 0x21ff], [0x27f0, 0x27ff], [0x2b00, 0x2bff]]], ["Math", [[0x2200, 0x22ff]]], ["Technical", [[0x2300, 0x23ff]]],
+    ["Shapes", [[0x2500, 0x25ff]]], ["Symbols and Dingbats", [[0x2600, 0x27bf]]], ["Ligatures", [[0xfb00, 0xfb06]]],
+    ["Private Use (alternates)", [[0xe000, 0xf8ff]]],
+  ];
+  const SKIP = new Set([0x7f, 0xa0, 0xad, 0x2028, 0x2029, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064]);
+  const context = document.createElement("canvas").getContext("2d");
+  const found = new Map();   // "family\u0000style" → { css, groups }
+  let current = null, editing = false, faces = 0;
+
+  // CSS for a Figma style: weight and slant from its name
+  function cssOf(font) {
+    const name = font.style.toLowerCase().replace(/[\s_-]/g, "");
+    const weights = [["thin", 100], ["hairline", 100], ["extralight", 200], ["ultralight", 200], ["light", 300], ["medium", 500],
+                     ["semibold", 600], ["demibold", 600], ["extrabold", 800], ["ultrabold", 800], ["bold", 700], ["black", 900], ["heavy", 900]];
+    const hit = weights.find(([word]) => name.includes(word));
+    return { weight: hit ? hit[1] : 400, style: /italic|oblique/.test(name) ? "italic" : "normal" };
+  }
+
+  // The font as the window can draw it: this one style by its full name where the computer has it, else its family
+  async function face(font) {
+    const css = cssOf(font);
+    const compact = (text) => text.replace(/\s+/g, "");
+    const names = [`${font.family} ${font.style}`, `${compact(font.family)}-${compact(font.style)}`];
+    if (/^(regular|normal|roman|book)$/i.test(font.style)) names.push(font.family);
+    const family = `FS Glyph ${++faces}`;
+    try {
+      const loaded = await new FontFace(family, names.map(name => `local("${name.replace(/"/g, "")}")`).join(", ")).load();
+      document.fonts.add(loaded);
+      return { stack: `"${family}"`, weight: 400, style: "normal" };
+    } catch {
+      return { stack: `"${font.family.replace(/"/g, "")}"`, ...css };
+    }
+  }
+
+  // Every character, empty and zero wide (make_blank_font.py)
+  const BLANK_FONT = "AAEAAAAKAIAAAwAgT1MvMkTgQZsAAAEoAAAAYGNtYXAAIrhBAAABkAAAADRnbHlmAAAAAAAAAcwAAAABaGVhZC0gTJYAAACsAAAANmhoZWEDIf86AAAA5AAAACRobXR4AAAAAAAAAYgAAAAGbG9jYQAAAAAAAAHEAAAABm1heHAAAwACAAABCAAAACBuYW1lBJpQxQAAAdAAAABjcG9zdG1nc80AAAI0AAAALAABAAAAAQAA1wSIlV8PPPUAAwPoAAAAAOcFBdsAAAAA5wUF2wAAAAAAAAAAAAAAAwACAAAAAAAAAAEAAAMg/zgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAEAAAACAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwAAAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPz8/PwAAAAD//wMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAEAAwAKAAAADAANAAAAAAAoAAAAAAAAAAIAAAAAAADX/wAAAAEAAOAAABD//wAAAAEAAAAAAAAAAAAAAAAAAAAEADYAAQAAAAAAAQAIAAAAAQAAAAAAAgAHAAgAAwABBAkAAQAQAA8AAwABBAkAAgAOAB9GUyBCbGFua1JlZ3VsYXIARgBTACAAQgBsAGEAbgBrAFIAZQBnAHUAbABhAHIAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAQIFYmxhbms=";
+  const blankReady = new FontFace("FS Blank", `url(data:font/ttf;base64,${BLANK_FONT})`).load().then(face => document.fonts.add(face));
+
+  // With the blank font behind it, a character is wider than zero only where the font has it
+  const has = (glyph, look) => {
+    context.font = `${look.style} ${look.weight} 40px ${look.stack}, "FS Blank"`;
+    return context.measureText(glyph).width > 0;
+  };
+
+  function detect(look) {
+    const groups = [];
+    for (const [name, ranges] of GROUPS) {
+      const glyphs = [];
+      for (const [from, to] of ranges) for (let point = from; point <= to; point++) {
+        if (SKIP.has(point)) continue;
+        const glyph = String.fromCodePoint(point);
+        if (has(glyph, look)) glyphs.push(glyph);
+      }
+      if (glyphs.length) groups.push({ name, glyphs });
+    }
+    return groups;
+  }
+
+  // Fonts only Figma has, most of them Google's: from Google Fonts, every subset
+  async function fromGoogle(font) {
+    const css = cssOf(font);
+    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font.family)}:ital,wght@${css.style === "italic" ? 1 : 0},${css.weight}&display=block`;
+    if (!document.querySelector(`link[href="${url}"]`)) document.head.append(make("link", { rel: "stylesheet", href: url }));
+    const sample = GROUPS.flatMap(([, ranges]) => ranges).filter(([from]) => from < 0xe000).map(([from, to]) => {
+      let text = ""; for (let point = from; point <= to; point++) text += String.fromCodePoint(point); return text;
+    }).join("");
+    try {
+      await new Promise((resolve, reject) => { const link = document.querySelector(`link[href="${url}"]`); if (link.sheet) resolve(); else { link.onload = resolve; link.onerror = reject; } });
+      await document.fonts.load(`${css.style} ${css.weight} 40px "${font.family}"`, sample);
+    } catch { return null; }
+    return { stack: `"${font.family.replace(/"/g, "")}"`, ...css };
+  }
+
+  async function glyphsOf(font) {
+    const key = font.family + "\u0000" + font.style;
+    if (found.has(key)) return found.get(key);
+    await blankReady;
+    let look = await face(font);
+    let groups = detect(look);
+    let source = "on this computer";
+    if (!groups.length) {
+      look = await fromGoogle(font);
+      groups = look ? detect(look) : [];
+      source = "from Google Fonts";
+    }
+    const result = { look, groups, source };
+    found.set(key, result);
+    return result;
+  }
+
+  let showing = "";
+  async function showGlyphs() {
+    const box = $("glyph-groups");
+    if (!current) {
+      $("glyph-font").textContent = "No text selected";
+      $("glyph-note").textContent = "Click into a text, or select a text layer, to see its font's characters.";
+      box.replaceChildren(); showing = ""; return;
+    }
+    const label = `${current.family} ${current.style}`;
+    $("glyph-font").textContent = label;
+    $("glyph-note").textContent = editing ? "Click a character to put it in at the cursor." : "Click a character to copy it, or click into the text to put it in at the cursor.";
+    const query = $("glyph-search").value.trim();
+    const state = label + "\u0000" + query;
+    if (state === showing) return;
+    showing = state;
+    box.replaceChildren(make("div", { className: "faint", textContent: "Finding its characters…" }));
+    const { look, groups, source } = await glyphsOf(current);
+    if (showing !== state) return;
+    const wanted = query.replace(/^u\+/i, "");
+    const matches = (glyph) => !query || glyph === query || (/^[0-9a-f]{2,6}$/i.test(wanted) && glyph.codePointAt(0) === parseInt(wanted, 16));
+    const sections = [];
+    let total = 0;
+    for (const group of groups) {
+      const glyphs = group.glyphs.filter(matches);
+      if (!glyphs.length) continue;
+      total += glyphs.length;
+      const grid = make("div", { className: "grid" }, glyphs.map(glyph => make("button", {
+        textContent: glyph, title: `U+${glyph.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`,
+        style: `font-family: ${look.stack}, monospace; font-weight: ${look.weight}; font-style: ${look.style}`,
+        onclick: () => use(glyph),
+        onmouseenter: () => { $("footer").textContent = `${glyph}  U+${glyph.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}`; },
+      })));
+      sections.push(make("div", { className: "group" }, [make("span", { textContent: group.name }), make("span", { textContent: String(glyphs.length) })]), grid);
+    }
+    if (!groups.length) sections.push(make("div", { className: "muted", textContent: "This font isn't on this computer, and Google Fonts doesn't have it either, so its characters can't be shown." }));
+    else if (!total) sections.push(make("div", { className: "muted", textContent: "No character matches." }));
+    else $("glyph-note").textContent += ` ${total} characters, ${source}.`;
+    box.replaceChildren(...sections);
+  }
+  $("glyph-search").addEventListener("input", showGlyphs);
+
+  function use(glyph) {
+    if (editing) post({ type: "insert", glyph });
+    else copy(glyph);
+  }
+  function copy(text) {
+    const area = make("textarea", { value: text });
+    document.body.append(area); area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    say(ok ? `Copied ${text}. Paste it into a text, or click into one to put characters in directly.` : "Couldn't copy it.");
+  }
+
+  // MARK: Fonts
+
+  let scanned = false, families = [], missing = [];
+  function scan() {
+    scanned = true;
+    $("fonts-list").replaceChildren(make("div", { className: "faint", textContent: "Checking…" }));
+    post({ type: "scanMissing", scope: $("fonts-scope").value });
+  }
+  $("fonts-scan").addEventListener("click", scan);
+  $("fonts-scope").addEventListener("change", scan);
+
+  function showMissing(result) {
+    scanned = true;
+    families = result.families;
+    missing = result.missing;
+    $("families").replaceChildren(...families.map(entry => make("option", { value: entry.family })));
+    const where = result.scope === "selection" ? "the selection" : `“${result.page}”`;
+    $("fonts-title").textContent = missing.length ? `${missing.length} missing ${missing.length === 1 ? "font" : "fonts"}` : "No missing fonts";
+    $("fonts-note").textContent = missing.length
+      ? `On ${where}, not on this computer. Each comes with the same font under another name where this computer has one, else a similar one.`
+      : `Everything on ${where} is on this computer.`;
+    $("fonts-list").replaceChildren(...missing.map(row));
+    askLibrary();
+    const ready = missing.filter(entry => entry.match);
+    $("fonts-all-row").hidden = !ready.length;
+    // The bar: every missing font at once, as soon as the plugin opens
+    bannerWanted = ready.length > 0 && result.scope === "page";
+    showBanner();
+    if (ready.length) {
+      const same = ready.filter(entry => entry.match.same).length;
+      const layers = new Set(ready.flatMap(entry => entry.nodeIds)).size;
+      $("banner-title").textContent = `${missing.length} ${missing.length === 1 ? "font is" : "fonts are"} missing here`;
+      $("banner-note").textContent = [same && `${same} the same under another name`, ready.length - same && `${ready.length - same} with a similar one`]
+        .filter(Boolean).join(", ") + ` · ${layers} ${layers === 1 ? "layer" : "layers"}`;
+    }
+    showLibrary();
+  }
+
+  // MARK: Fonts from the Font Scout app's library
+
+  const APP = "http://localhost:51842";
+  let library = {};   // missing families the library has → their styles
+  async function askLibrary() {
+    const families = [...new Set(missing.map(entry => entry.family))];
+    try {
+      const response = await fetch(`${APP}/figma/library`, { method: "POST", body: JSON.stringify({ families }) });
+      library = response.ok ? (await response.json()).have || {} : {};
+    } catch { library = {}; }   // Font Scout isn't running, or isn't there
+    showLibrary();
+  }
+
+  const inLibrary = () => [...new Set(missing.filter(entry => library[entry.family]).map(entry => entry.family))];
+
+  function showLibrary() {
+    const families = inLibrary();
+    const button = $("banner-install");
+    button.hidden = !families.length;
+    button.textContent = `Install ${families.length} from Font Scout`;
+    $("banner-all").className = families.length ? "button" : "button primary";
+    if (families.length && !bannerWanted && missing.length) { bannerWanted = true; showBanner(); }
+    for (const entry of missing) entry.showLibrary && entry.showLibrary(!!library[entry.family]);
+  }
+
+  async function install(families) {
+    if (!families.length) return;
+    say("Confirm in Font Scout, which opens with the question…");
+    let result;
+    try {
+      const response = await fetch(`${APP}/figma/install`, { method: "POST", body: JSON.stringify({ families }) });
+      if (response.status === 409) return say("Font Scout is already asking about fonts: answer it there first.");
+      result = response.ok ? await response.json() : null;
+    } catch { result = null; }
+    if (!result) return say("Couldn't reach Font Scout. Is it open?");
+    if (result.declined) return say("Not installed.");
+    const styles = result.installed + result.alreadyInstalled;
+    say(`Installed ${styles} ${styles === 1 ? "style" : "styles"}${result.failures.length ? `, ${result.failures.length} didn't work` : ""}. Figma picks them up in a moment.`);
+    // Figma notices new fonts after a little while
+    setTimeout(scan, 3000);
+    setTimeout(() => { scan(); setTimeout(() => {
+      if (missing.some(entry => families.includes(entry.family))) say("If they still show as missing, quit and reopen Figma: it then sees the new fonts.");
+    }, 1500); }, 9000);
+  }
+  $("banner-install").addEventListener("click", () => install(inLibrary()));
+
+  // Not on the Fonts tab, which has it all already
+  let bannerWanted = false;
+  function showBanner() { $("banner").hidden = !bannerWanted || tab === "fonts"; }
+
+  function stylesOf(family) { return (families.find(entry => entry.family === family) || { styles: [] }).styles; }
+
+  function row(entry) {
+    const familyInput = make("input", { value: entry.match ? entry.match.family : "", placeholder: "Replace with…" });
+    familyInput.setAttribute("list", "families");
+    const styleSelect = make("select");
+    const replace = make("button", { className: "button", textContent: "Replace" });
+    const fill = (keep) => {
+      const styles = stylesOf(familyInput.value);
+      styleSelect.replaceChildren(...styles.map(style => make("option", { value: style, textContent: style })));
+      if (keep && styles.includes(keep)) styleSelect.value = keep;
+      replace.disabled = !styles.length;
+    };
+    fill(entry.match && entry.match.style);
+    familyInput.addEventListener("input", () => fill());
+    entry.choice = () => styleSelect.value && stylesOf(familyInput.value).length ? { family: familyInput.value, style: styleSelect.value } : null;
+    replace.addEventListener("click", () => { const to = entry.choice(); if (to) replace([{ from: { family: entry.family, style: entry.style }, to, nodeIds: entry.nodeIds }]); });
+    const layers = entry.nodeIds.length;
+    const tag = !entry.match ? null : entry.match.same
+      ? make("span", { className: "tag same", textContent: "same font" })
+      : make("span", { className: "tag", textContent: `similar ${entry.match.kind}`, title: "Not the same font: one of the same kind, from this file or a common one" });
+    const libraryTag = make("span", { className: "tag library", textContent: "in your Font Scout library", hidden: true });
+    const installButton = make("button", { className: "button primary", textContent: "Install", hidden: true, onclick: () => install([entry.family]) });
+    entry.showLibrary = (has) => { libraryTag.hidden = !has; installButton.hidden = !has; };
+    return make("div", { className: "missing" }, [
+      make("div", { className: "row spread" }, [
+        make("div", {}, [make("div", { className: "title", textContent: `${entry.family} ${entry.style}` }),
+                         make("div", { className: "muted" }, [`${layers} ${layers === 1 ? "layer" : "layers"}${entry.match ? "" : " · nothing like it here"}`, ...(tag ? [tag] : []), libraryTag])]),
+        make("div", { className: "row" }, [
+          make("button", { className: "link", textContent: "Select", onclick: () => post({ type: "select", nodeIds: entry.nodeIds }) }),
+          installButton,
+        ]),
+      ]),
+      make("div", { className: "pick" }, [familyInput, styleSelect, replace]),
+    ]);
+  }
+
+  // Every missing font with its replacement as the rows show it: one step for ⌘Z
+  function replaceAll() {
+    replace(missing.map(entry => ({ from: { family: entry.family, style: entry.style }, to: entry.choice && entry.choice(), nodeIds: entry.nodeIds }))
+      .filter(swap => swap.to));
+  }
+  function replace(swaps) {
+    if (!swaps.length) return;
+    say("Replacing…");
+    post({ type: "replace", swaps });
+  }
+  $("fonts-all").addEventListener("click", replaceAll);
+  $("banner-all").addEventListener("click", replaceAll);
+  $("banner-review").addEventListener("click", () => show("fonts"));
+
+  // MARK: Claude
+
+  const base = "http://localhost:51843";
+  const hex = (bytes) => [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
+  // The code this window shows while it waits to be paired, new each time it opens
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+  let key = "", file = "", editor = "", started = false;
+  const labels = { status: "Looked at the file", fonts: "Looked up fonts", texts: "Read text layers", setText: "Changed text",
+                   setFont: "Changed fonts", screenshot: "Took a picture", run: "Ran a script" };
+  const quiet = ["status", "fonts", "texts", "screenshot"];   // reads: not worth a line in the history
+  const query = () => `key=${key}&code=${code}&file=${encodeURIComponent(file)}&editor=${editor}`;
+
+  function claude(state, title, note) {
+    $("claude-dot").className = "dot " + state;
+    $("claude-title").textContent = title;
+    $("claude-note").textContent = note;
+    $("claude-code").hidden = state !== "pair";
+    $("claude-connected").hidden = state !== "on";
+  }
+
+  // Long polls: the bridge answers when Claude has something for this file, or after 20 seconds with nothing
+  async function poll() {
+    let wasPairing = false;
+    while (true) {
+      let response;
+      try {
+        response = await fetch(`${base}/figma/poll?${query()}`, { cache: "no-store" });
+      } catch (error) {
+        claude("", "Looking for Claude…", "Start Claude with Font Scout's tools (font-scout-mcp). It connects by itself.");
+        await sleep(2000);
+        continue;
+      }
+      if (response.status === 202) {
+        $("claude-code").textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+        claude("wait", "Pair with Claude", "Tell Claude this code to connect it to this file. Only once on this computer.");
+        if (!wasPairing) { wasPairing = true; show("claude"); }
+        await sleep(1500);
+        continue;
+      }
+      claude("on", "Connected to Claude", "Claude can change text in this file, with the fonts on this computer.");
+      if (response.status === 200) {
+        const command = await response.json();
+        post({ type: "command", id: command.id, op: command.op, args: command.args });
+      } else if (response.status !== 204) {
+        await sleep(2000);
+      }
+    }
+  }
+
+  function remember(result) {
+    if (quiet.includes(result.op) && result.ok) return;
+    const list = $("history");
+    if (list.dataset.started !== "1") { list.replaceChildren(); list.dataset.started = "1"; }
+    const text = result.ok ? (labels[result.op] || result.op) : `Didn't work: ${result.error}`;
+    list.prepend(make("li", { className: result.ok ? "" : "failed" }, [
+      make("time", { textContent: new Date().toTimeString().slice(0, 5) }), make("span", { textContent: text, title: text })]));
+    while (list.children.length > 6) list.lastChild.remove();
+  }
+
+  async function answer(result) {
+    remember(result);
+    const body = JSON.stringify({ id: result.id, ok: result.ok, value: result.value, error: result.error });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { await fetch(`${base}/figma/result?key=${key}`, { method: "POST", body }); return; }
+      catch { await sleep(1000); }
+    }
+  }
+
+  $("scripts").addEventListener("change", () => post({ type: "allowScripts", value: $("scripts").checked }));
+
+  // MARK: Messages from code.js
+
+  onmessage = (event) => {
+    const message = event.data.pluginMessage;
+    if (!message) return;
+    switch (message.type) {
+      case "hello":
+        file = message.file; editor = message.editor;
+        $("scripts").checked = message.allowScripts;
+        key = message.key || hex(crypto.getRandomValues(new Uint8Array(32)));
+        if (!message.key) post({ type: "saveKey", key });
+        if (!started) { started = true; poll(); }
+        break;
+      case "font":
+        current = message.font; editing = message.editing;
+        showGlyphs();
+        break;
+      case "inserted":
+        if (!message.ok) say(message.reason === "missingFont" ? "This text's font isn't on this computer, so nothing can be typed into it." : "Click into the text first.");
+        break;
+      case "missing":
+        showMissing(message);
+        break;
+      case "replaced":
+        say(`Replaced ${message.fonts} ${message.fonts === 1 ? "font" : "fonts"} in ${message.changed} ${message.changed === 1 ? "place" : "places"}. ⌘Z undoes it.`);
+        scan();
+        break;
+      case "result":
+        answer(message);
+        break;
+    }
+  };
+  post({ type: "ready" });
+</script>
